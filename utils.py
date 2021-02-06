@@ -99,30 +99,47 @@ def gen_pickle(seeds_url, geckodriver_path, pages, basic_url, time_id):
 def get_restaurant(url_restaurant):
     html_restaurant = requests.get(url_restaurant)
     soup_restaurant = BeautifulSoup(html_restaurant.text, 'lxml')
-    
+
     try:
         name = soup_restaurant.find_all('h1')[-1].text
-        grade = float(soup_restaurant.find('span', class_ = 'r2Cf69qf').text.replace(',', '.'))
-        n_opinions = int(re.search('([0-9\.]+).*', soup_restaurant.find('a', class_ = '_10Iv7dOs').text).group(1).replace('.', ''))
-        dict_qualifications = {}
+        address_soups = soup_restaurant.find_all('div', class_ = '_1ud-0ITN')
 
-        qualifications = soup_restaurant.find(
-            'div', class_ = 'ui_columns filters').select(
-            'div[class*="prw_rup prw_filters_detail_checkbox ui_column separated"]')
+        for address_soup in address_soups:
+            try:
+                address = address_soup.find('a', class_ = '_15QfMZ2L').text
+            except:
+                pass
 
-        for category in qualifications:
-            key = category.find('div', class_ = 'name ui_header h2').text
-            values = [(elem.find('label', class_ = 'row_label label').text,
-                       int(elem.find('span', class_ = 'row_num is-shown-at-tablet').text.replace('.', '')))
-                      if elem.find('span', class_ = 'row_num is-shown-at-tablet') != None
-                      else (elem.find('label', class_ = 'row_label label').text, None)
-                      for elem in category.find_all('div', class_ = 'ui_checkbox item') if elem != None]
+        try:
+            grade = float(soup_restaurant.find('span', class_ = 'r2Cf69qf').text.replace(',', '.'))
+            n_opinions = int(re.search('([0-9\.]+).*', soup_restaurant.find('a', class_ = '_10Iv7dOs').text).group(1).replace('.', ''))
 
-            dict_qualifications[key] = values
+
+            dict_qualifications = {}
+
+            qualifications = soup_restaurant.find(
+                'div', class_ = 'ui_columns filters').select(
+                'div[class*="prw_rup prw_filters_detail_checkbox ui_column separated"]')
+
+            for category in qualifications:
+                key = category.find('div', class_ = 'name ui_header h2').text
+                values = [(elem.find('label', class_ = 'row_label label').text,
+                           int(elem.find('span', class_ = 'row_num is-shown-at-tablet').text.replace('.', '')))
+                          if elem.find('span', class_ = 'row_num is-shown-at-tablet') != None
+                          else (elem.find('label', class_ = 'row_label label').text, None)
+                          for elem in category.find_all('div', class_ = 'ui_checkbox item') if elem != None]
+
+                dict_qualifications[key] = values
+
+        except:
+            grade, n_opinions, dict_qualifications = soup_restaurant.find('div', class_ = '_1AhFUMxC').text.replace('\n', ' '), 0 , None
 
         covid = (True if soup_restaurant.find('div', class_ = '_2oPcIw1r _16XWDY6r') != None else False)
         positions = [''.join(re.search('([0-9]+)(.*)', elem.text).groups()).replace('.', '')
                      for elem in soup_restaurant.find_all('div', class_ = '_3-W4EexF')]
+
+        if len(positions) == 0:
+            positions = soup_restaurant.find('div', class_ = '_1AhFUMxC').text.replace('\n', ' ')
 
         # characteristics = ...
 
@@ -132,11 +149,12 @@ def get_restaurant(url_restaurant):
         dict_details = {dict_elem[0][i].text: dict_elem[1][i].text for i in range(len(dict_elem[0]))}
 
         dict_test = {'id':hash(url_restaurant), 'Nombre restaurante':[name], 'Promedio de calificaciones':[grade],
-                     'N° de opiniones':[n_opinions], 'Calificación de viajeros por categoría':[dict_qualifications],
-                     'Toman medidas de seguridad':[covid], 'Rankings':[positions], 'Tipo de comida y servicios':[dict_details], 'url':url_restaurant}
+                     'N° de opiniones':[n_opinions], 'Dirección':[address],
+                     'Calificación de viajeros por categoría':[dict_qualifications], 'Toman medidas de seguridad':[covid],
+                     'Rankings':[positions], 'Tipo de comida y servicios':[dict_details], 'url':url_restaurant}
 
         return dict_test
-    
+
     except Exception as e:
         return None
     
@@ -198,23 +216,30 @@ def get_reviews(url):
         html = requests.get(url['scraping'], timeout=600)
     
     except Exception as e:
-        dict_reviews = {'id':hash(url['identifier']), 'date_review':'timeout', 'comments':'timeout',
-                        'date_stayed':'timeout', 'response_body':'timeout', 'user_name':'timeout',
-                        'user_reviews':'timeout', 'useful_votes':'timeout', 'url':url}
+        dict_reviews = {'id':hash(url['identifier']), 'restaurant':'timeout', 'grade':'timeout',
+                        'date_review':'timeout', 'comments':'timeout', 'date_stayed':'timeout',
+                        'response_body':'timeout', 'user_name':'timeout', 'user_reviews':'timeout',
+                        'useful_votes':'timeout', 'url':url}
         
         return dict_reviews
         
     soup = BeautifulSoup(html.text, 'lxml')
+    restaurant = soup.find('h1', class_ = '_3a1XQ88S').text
     soup_reviews = soup.find_all('div', class_ = 'reviewSelector')
     dict_months = {'enero':1, 'febrero':2, 'marzo':3, 'abril':4,
                   'mayo':5, 'junio':6, 'julio':7, 'agosto':8,
                   'septiembre':9, 'octubre':10, 'noviembre':11, 'diciembre':12}
 
-    dict_reviews = {'id':[], 'date_review':[], 'comments':[], 'date_stayed':[], 'response_body':[],
-                    'user_name':[], 'user_reviews':[], 'useful_votes':[], 'url':[]}
+    dict_reviews = {'id':[], 'restaurant':[], 'grade':[], 'date_review':[], 'comments':[],
+                    'date_stayed':[], 'response_body':[], 'user_name':[], 'user_reviews':[],
+                    'useful_votes':[], 'url':[]}
 
     for review in soup_reviews:
         dict_reviews['id'].append(hash(url['identifier']))
+        dict_reviews['restaurant'].append(restaurant)
+        grade = str(review.find('div', class_ = 'ui_column is-9').span)
+        re_grade = int(re.search('_([0-9]+)">', grade).group(1))
+        dict_reviews['grade'].append(re_grade)
 
         try:
             raw_date = re.search('([0-9]+) de ([a-z]+) de ([0-9]+)',
@@ -256,9 +281,6 @@ def get_reviews(url):
         #    dict_reviews['response_body'].append(None)
 
         full_response = review.find('div', class_ = 'entry')
-        
-        try:
-            
         
         try:
             dict_reviews['user_name'].append(review.find('div', class_ = 'info_text pointer_cursor').text)
