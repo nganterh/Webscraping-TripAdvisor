@@ -3,6 +3,7 @@ bs4
 dask
 distributed
 lxml
+openpyxl
 pandas
 selenium
 tqdm
