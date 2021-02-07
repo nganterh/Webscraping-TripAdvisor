@@ -224,7 +224,6 @@ def get_reviews(url):
         return dict_reviews
         
     soup = BeautifulSoup(html.text, 'lxml')
-    restaurant = soup.find('h1', class_ = '_3a1XQ88S').text
     soup_reviews = soup.find_all('div', class_ = 'reviewSelector')
     dict_months = {'enero':1, 'febrero':2, 'marzo':3, 'abril':4,
                   'mayo':5, 'junio':6, 'julio':7, 'agosto':8,
@@ -233,7 +232,12 @@ def get_reviews(url):
     dict_reviews = {'id':[], 'restaurant':[], 'grade':[], 'date_review':[], 'comments':[],
                     'date_stayed':[], 'response_body':[], 'user_name':[], 'user_reviews':[],
                     'useful_votes':[], 'url':[]}
-
+    try:
+        restaurant = soup.find('h1', class_ = '_3a1XQ88S').text
+        
+    except Exception as e:
+        restaurant = e
+        
     for review in soup_reviews:
         dict_reviews['id'].append(hash(url['identifier']))
         dict_reviews['restaurant'].append(restaurant)
@@ -264,21 +268,21 @@ def get_reviews(url):
             dict_reviews['date_stayed'].append(f'{month} with error: {year}')
             
 
-        #try:
-        #    full_response = review.find('div', class_ = 'mgrRspnInline')
-        #    local_body = []
+        try:
+            full_response = review.find('div', class_ = 'mgrRspnInline')
+            local_body = []
 
-        #    for match in ['(.*)\n', '(.*)\.\.\.Más']:
-        #        re_body = re.search(match, full_response.find('p', class_ = 'partial_entry').text)
+            for match in ['(.*)\n', '(.*)\.\.\.Más']:
+                re_body = re.search(match, full_response.find('p', class_ = 'partial_entry').text)
 
-        #        if re_body != None:
-        #            local_body.append(re_body.group(1)) # Acá agregar marcador para extracción completa
+                if re_body != None:
+                    local_body.append(re_body.group(1)) # Acá agregar marcador para extracción completa
                     
-        #    dict_reviews['response_body'].append(' '.join(local_body))
+            dict_reviews['response_body'].append(' '.join(local_body))
 
-        #except:
-        #    full_response = None
-        #    dict_reviews['response_body'].append(None)
+        except:
+            full_response = None
+            dict_reviews['response_body'].append(None)
 
         full_response = review.find('div', class_ = 'entry')
         
