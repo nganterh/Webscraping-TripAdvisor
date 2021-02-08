@@ -211,7 +211,7 @@ def prepare_urls(dict_reviews):
     return url_reviews
 
 
-def get_reviews(url):
+def get_reviews(url, browsers):
     try:
         html = requests.get(url['scraping'], timeout=600)
     
@@ -238,7 +238,7 @@ def get_reviews(url):
     except Exception as e:
         restaurant = e
         
-    for review in soup_reviews:
+    for i, review in enumerate(soup_reviews):
         dict_reviews['id'].append(hash(url['identifier']))
         dict_reviews['restaurant'].append(restaurant)
         grade = str(review.find('div', class_ = 'ui_column is-9').span)
@@ -254,9 +254,41 @@ def get_reviews(url):
 
         except:
             dict_reviews['date_review'].append(review.find('span', class_ = 'ratingDate').text)
-
-        dict_reviews['comments'].append(review.find('p', class_ = 'partial_entry').text)
-
+        
+        # In the next lines, we are going to extract the actual reviews.
+        try:
+            basic_review = review.find('p', class_ = 'partial_entry').text
+            extended_review = review.find('span', class_ = 'postSnippet').text
+            complete_review = basic_review.replace(f'...{extended_review}Más',
+                                                   f' {extended_review}')
+        except:
+            button_code = review.find('span', class_ = 'taLnk ulBlueLinks')
+                
+            if (button_code != None) and ('browser' not in locals()):
+                browser = None
+                
+                while browser == None:
+                    browser = utils.browser_call(browsers)
+                    if browser == None:
+                        time.sleep(1)
+                        
+                browser.driver.get(url['scraping'])                
+                button = browser.driver.find_element_by_class_name('taLnk.ulBlueLinks').click()
+                
+                html_selenium = browser.driver.page_source
+                soup_selenium = BeautifulSoup(html_selenium, 'lxml')
+                
+                reviews_selenium = soup_selenium.find_all('div', class_ = 'reviewSelector')
+                complete_review = reviews_selenium[i].find('p', class_ = 'partial_entry').text
+                
+            else:
+                complete_review = basic_review
+                
+        finally:
+            complete_review = str(complete_review).replace('\n', ' ')    
+            dict_reviews['comments'].append(complete_review)
+            
+        # The following lines extract the dates
         raw_date = re.search(': ([a-z]+) de ([0-9]+)',
                              review.find('div', class_ = 'prw_rup prw_reviews_stay_date_hsx').text)
         try:
@@ -302,5 +334,36 @@ def get_reviews(url):
         dict_reviews['useful_votes'].append(get_votes(review.find('span', class_ = 'numHlpIn')))
         
         dict_reviews['url'].append(url)
+        browser.hang()
 
     return dict_reviews
+
+
+class Browser:
+    
+    def __init__(self, name, geckodriver_path):
+        self.driver = webdriver.Firefox(executable_path=geckodriver_path)
+        self.name = name
+        self.state = 0
+        
+    def hang(self):
+        self.state = 0
+        
+
+def gen_browsers(client, geckodriver_path):
+    browsers = [Browser('{}{:02d}'.format('browser', worker + 1), geckodriver_path)
+                for worker in range(len(client.scheduler_info()['workers']))]
+    
+    return browsers
+
+
+def browser_call(browsers):
+    for browser in browsers:
+        
+        if browser.state == 0:
+            browser.state = 1
+            
+            return browser
+        
+        else:
+            return None

@@ -2,6 +2,7 @@ bokeh
 bs4
 dask
 distributed
+googlemaps
 lxml
 openpyxl
 pandas
