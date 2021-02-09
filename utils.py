@@ -1,3 +1,4 @@
+from distributed import get_worker
 from selenium import webdriver
 from bs4 import BeautifulSoup
 import requests
@@ -211,7 +212,37 @@ def prepare_urls(dict_reviews):
     return url_reviews
 
 
-def get_reviews(url, browsers):
+class Browser:
+    
+    def __init__(self, name, geckodriver_path):
+        self.driver = webdriver.Firefox(executable_path=geckodriver_path)
+        self.name = name
+        self.state = 0
+        
+    def hang(self):
+        self.state = 0
+        
+
+def gen_browsers(client, geckodriver_path):
+    browsers = [Browser('{}{:02d}'.format('browser', worker + 1), geckodriver_path)
+                for worker in range(len(client.scheduler_info()['workers']))]
+    
+    return browsers
+
+
+def browser_call(browsers):
+    for browser in browsers:
+        
+        if browser.state == 0:
+            browser.state = 1
+            
+            return browser
+        
+        else:
+            return None
+
+
+def get_reviews(url):
     try:
         html = requests.get(url['scraping'], timeout=600)
     
@@ -267,15 +298,15 @@ def get_reviews(url, browsers):
             if (button_code != None) and ('browser' not in locals()):
                 browser = None
                 
-                while browser == None:
-                    browser = utils.browser_call(browsers)
-                    if browser == None:
-                        time.sleep(1)
+                #while browser == None:
+                #    browser = utils.browser_call(browsers)
+                #    if browser == None:
+                #        time.sleep(1)
                         
-                browser.driver.get(url['scraping'])                
-                button = browser.driver.find_element_by_class_name('taLnk.ulBlueLinks').click()
+                get_worker.browser.driver.get(url['scraping'])                
+                button = get_worker.browser.driver.find_element_by_class_name('taLnk.ulBlueLinks').click()
                 
-                html_selenium = browser.driver.page_source
+                html_selenium = get_worker.browser.driver.page_source
                 soup_selenium = BeautifulSoup(html_selenium, 'lxml')
                 
                 reviews_selenium = soup_selenium.find_all('div', class_ = 'reviewSelector')
@@ -337,33 +368,3 @@ def get_reviews(url, browsers):
         browser.hang()
 
     return dict_reviews
-
-
-class Browser:
-    
-    def __init__(self, name, geckodriver_path):
-        self.driver = webdriver.Firefox(executable_path=geckodriver_path)
-        self.name = name
-        self.state = 0
-        
-    def hang(self):
-        self.state = 0
-        
-
-def gen_browsers(client, geckodriver_path):
-    browsers = [Browser('{}{:02d}'.format('browser', worker + 1), geckodriver_path)
-                for worker in range(len(client.scheduler_info()['workers']))]
-    
-    return browsers
-
-
-def browser_call(browsers):
-    for browser in browsers:
-        
-        if browser.state == 0:
-            browser.state = 1
-            
-            return browser
-        
-        else:
-            return None
