@@ -212,166 +212,187 @@ def prepare_urls(dict_reviews):
     return url_reviews
 
 
-class Browser:
-    
-    def __init__(self, name, geckodriver_path):
-        self.driver = webdriver.Firefox(executable_path=geckodriver_path)
-        self.name = name
-        self.state = 0
-        
-    def hang(self):
-        self.state = 0
+#class Browser:
+#    
+#    def __init__(self, name, geckodriver_path):
+#        self.driver = webdriver.Firefox(executable_path=geckodriver_path)
+#        self.name = name
+#        self.state = 0
+#        
+#    def hang(self):
+#        self.state = 0
         
 
-def gen_browsers(client, geckodriver_path):
-    browsers = [Browser('{}{:02d}'.format('browser', worker + 1), geckodriver_path)
-                for worker in range(len(client.scheduler_info()['workers']))]
-    
-    return browsers
+#def gen_browsers(client, geckodriver_path):
+#    browsers = [Browser('{}{:02d}'.format('browser', worker + 1), geckodriver_path)
+#                for worker in range(len(client.scheduler_info()['workers']))]
+#    
+#    return browsers
 
 
-def browser_call(browsers):
-    for browser in browsers:
+#def browser_call(browsers):
+#    for browser in browsers:
+#        
+#        if browser.state == 0:
+#            browser.state = 1
+#            
+#            return browser
+#        
+#        else:
+#            return None
         
-        if browser.state == 0:
-            browser.state = 1
-            
-            return browser
         
-        else:
-            return None
+def gen_chunks(combs, sample, size):
+    if isinstance(combs, dict):
+        combs = list(combs.keys())
+        
+    if sample == None:
+        sampled_list = combs
+    else:
+        sampled_list = combs[sample[0]:sample[1]]
+
+    for i in range(0, len(sampled_list), size):
+        yield sampled_list[i:i + size]
 
 
 def get_reviews(url):
-    # First, our request to the main url gets protected against possible timeout errors
     try:
-        html = requests.get(url['scraping'], timeout=600)
-    
-    except Exception as e:
-        dict_reviews = {'id':hash(url['identifier']), 'restaurant':'timeout', 'grade':'timeout',
-                        'date_review':'timeout', 'comments':'timeout', 'date_stayed':'timeout',
-                        'response_body':'timeout', 'user_name':'timeout', 'user_reviews':'timeout',
-                        'useful_votes':'timeout', 'url':url, 'Error':e}
-        
-        return dict_reviews
-    
-    # If we managed to get a response, our html code is converted to a soup and divided by its reviews
-    soup = BeautifulSoup(html.text, 'lxml')
-    soup_reviews = soup.find_all('div', class_ = 'reviewSelector')
-    
-    # A dictionary with the equivalent values per month is created to assist with our dates
-    dict_months = {'enero':1, 'febrero':2, 'marzo':3, 'abril':4,
-                  'mayo':5, 'junio':6, 'julio':7, 'agosto':8,
-                  'septiembre':9, 'octubre':10, 'noviembre':11, 'diciembre':12}
-    
-    # Our main dictionary is instanced and prepared to be filled through the following for loop
-    dict_reviews = {'id':[], 'restaurant':[], 'grade':[], 'date_review':[], 'comments':[],
-                    'date_stayed':[], 'response_body':[], 'user_name':[], 'user_reviews':[],
-                    'useful_votes':[], 'url':[]}
-    
-    # Although rare, some restaurants do not have any name, or do frequently give errors in that field
-    try:
-        restaurant = soup.find('h1', class_ = '_3a1XQ88S').text
-        
-    except Exception as e:
-        restaurant = e
-    
-    # With everything what's common for all reviews settled, we can iterate through our reviews
-    for i, review in enumerate(soup_reviews):
 
-        dict_reviews['id'].append(hash(url['identifier']))
-        dict_reviews['restaurant'].append(restaurant)
-        grade = str(review.find('div', class_ = 'ui_column is-9').span)
-        re_grade = int(re.search('_([0-9]+)">', grade).group(1))
-        dict_reviews['grade'].append(re_grade)
-
+        # First, our request to the main url gets protected against possible timeout errors
         try:
-            raw_date = re.search('([0-9]+) de ([a-z]+) de ([0-9]+)',
-                                 review.find('span', class_ = 'ratingDate').text)
+            html = requests.get(url['scraping'], timeout=600)
 
-            day, month, year = raw_date.group(1), dict_months[raw_date.group(2)], raw_date.group(3)
-            dict_reviews['date_review'].append('{}/{:02d}/{}'.format(day, month, year))
+        except Exception as e:
+            dict_reviews = {'id':hash(url['identifier']), 'restaurant':'timeout', 'grade':'timeout',
+                            'date_review':'timeout', 'comments':'timeout', 'date_stayed':'timeout',
+                            'response_body':'timeout', 'user_name':'timeout', 'user_reviews':'timeout',
+                            'useful_votes':'timeout', 'url':url, 'Error':e}
 
-        except:
-            dict_reviews['date_review'].append(review.find('span', class_ = 'ratingDate').text)
-        
-        # First we extract our review text by one of the following three ways
+            return dict_reviews
+
+        # If we managed to get a response, our html code is converted to a soup and divided by its reviews
+        soup = BeautifulSoup(html.text, 'lxml')
+        soup_reviews = soup.find_all('div', class_ = 'reviewSelector')
+
+        # A dictionary with the equivalent values per month is created to assist with our dates
+        dict_months = {'enero':1, 'febrero':2, 'marzo':3, 'abril':4,
+                      'mayo':5, 'junio':6, 'julio':7, 'agosto':8,
+                      'septiembre':9, 'octubre':10, 'noviembre':11, 'diciembre':12}
+
+        # Our main dictionary is instanced and prepared to be filled through the following for loop
+        dict_reviews = {'id':[], 'restaurant':[], 'grade':[], 'date_review':[], 'comments':[],
+                        'date_stayed':[], 'response_body':[], 'user_name':[], 'user_reviews':[],
+                        'useful_votes':[], 'url':[]}
+
+        # Although rare, some restaurants do not have any name, or do frequently give errors in that field
         try:
-            # Alternative 1
-            basic_review = review.find('p', class_ = 'partial_entry').text
-            extended_review = review.find('span', class_ = 'postSnippet').text
-            dict_reviews['comments'].append(basic_review.replace(f'...{extended_review}Más',
-                                                                 f' {extended_review}'))
-        except:
-            # There is no guarantee that we'll find our button. We therefore protect ourselves against
+            restaurant = soup.find('h1', class_ = '_3a1XQ88S').text
+
+        except Exception as e:
+            restaurant = e
+
+        # With everything what's common for all reviews settled, we can iterate through our reviews
+        for i, review in enumerate(soup_reviews):
+
+            dict_reviews['id'].append(hash(url['identifier']))
+            dict_reviews['restaurant'].append(restaurant)
+            grade = str(review.find('div', class_ = 'ui_column is-9').span)
+            re_grade = int(re.search('_([0-9]+)">', grade).group(1))
+            dict_reviews['grade'].append(re_grade)
+
             try:
-                button_code = review.find('span', class_ = 'taLnk ulBlueLinks')
+                raw_date = re.search('([0-9]+) de ([a-z]+) de ([0-9]+)',
+                                     review.find('span', class_ = 'ratingDate').text)
+
+                day, month, year = raw_date.group(1), dict_months[raw_date.group(2)], raw_date.group(3)
+                dict_reviews['date_review'].append('{}/{:02d}/{}'.format(day, month, year))
+
             except:
-                button_code = None
+                dict_reviews['date_review'].append(review.find('span', class_ = 'ratingDate').text)
+
+            # First we extract our review text by one of the following three ways
+            try:
+                # Alternative 1
+                basic_review = review.find('p', class_ = 'partial_entry').text
+                extended_review = review.find('span', class_ = 'postSnippet').text
+                dict_reviews['comments'].append(basic_review.replace(f'...{extended_review}Más',
+                                                                     f' {extended_review}'))
+            except:
+                # There is no guarantee that we'll find our button. We therefore protect ourselves against
+                try:
+                    button_code = review.find('span', class_ = 'taLnk ulBlueLinks')
+                except:
+                    button_code = None
+
+                # Alternative 2    
+                if button_code != None:
+                    get_worker().browser.driver.get(url['scraping'])
+                    button = get_worker().browser.driver.find_element_by_class_name('taLnk.ulBlueLinks').click()
+                    time.sleep(1)
+
+                    html_selenium = get_worker().browser.driver.page_source
+                    soup_selenium = BeautifulSoup(html_selenium, 'lxml')
+
+                    reviews_selenium = soup_selenium.find_all('div', class_ = 'reviewSelector')
+                    dict_reviews['comments'].append(reviews_selenium[i].find('p', class_ = 'partial_entry').text)
+
+                # Alternative 3
+                else:
+                    dict_reviews['comments'].append(basic_review)
+
+            # The following lines extract the dates
+            raw_date = re.search(': ([a-z]+) de ([0-9]+)',
+                                 review.find('div', class_ = 'prw_rup prw_reviews_stay_date_hsx').text)
+            try:
+                month, year = dict_months[raw_date.group(1)], raw_date.group(2)
+                dict_reviews['date_stayed'].append('{:02d}/{}'.format(month, year))
+
+            except Exception as e:
+                month, year = review.find('div', class_ = 'prw_rup prw_reviews_stay_date_hsx'), e
+                dict_reviews['date_stayed'].append(f'{month} with error: {year}')
+
+
+            try:
+                full_response = review.find('div', class_ = 'mgrRspnInline')
+                local_body = []
+
+                for match in ['(.*)\n', '(.*)\.\.\.Más']:
+                    re_body = re.search(match, full_response.find('p', class_ = 'partial_entry').text)
+
+                    if re_body != None:
+                        local_body.append(re_body.group(1)) # Acá agregar marcador para extracción completa
+
+                dict_reviews['response_body'].append(' '.join(local_body))
+
+            except:
+                full_response = None
+                dict_reviews['response_body'].append(None)
+
+            full_response = review.find('div', class_ = 'entry')
+
+            # After extracting our comments, we ... author name
+            try:
+                dict_reviews['user_name'].append(review.find('div', class_ = 'info_text pointer_cursor').text)
+
+            except Exception as e:
+                dict_reviews['user_name'].append('La url {} presenta un error de tipo {}'.format(url['scraping'], e)) 
+
+            try:
+                dict_reviews['user_reviews'].append(int(re.match('([0-9]+)',
+                                                                 review.find('span',
+                                                                             class_ = 'badgeText').text).group(1)))
+            except Exception as e:
+                dict_reviews['user_reviews'].append('La url {} presenta un error de tipo {}'.format(url['scraping'], e)) 
+
+            get_votes = lambda useful_votes: n.text if useful_votes != None else 0
+            dict_reviews['useful_votes'].append(get_votes(review.find('span', class_ = 'numHlpIn')))
+
+            dict_reviews['url'].append(url)
             
-            # Alternative 2    
-            if button_code != None:
-                get_worker().browser.driver.get(url['scraping'])
-                button = get_worker().browser.driver.find_element_by_class_name('taLnk.ulBlueLinks').click()
-                time.sleep(1)
-
-                html_selenium = get_worker().browser.driver.page_source
-                soup_selenium = BeautifulSoup(html_selenium, 'lxml')
-
-                reviews_selenium = soup_selenium.find_all('div', class_ = 'reviewSelector')
-                dict_reviews['comments'].append(reviews_selenium[i].find('p', class_ = 'partial_entry').text)
-                
-            # Alternative 3
-            else:
-                dict_reviews['comments'].append(basic_review)
-
-        # The following lines extract the dates
-        raw_date = re.search(': ([a-z]+) de ([0-9]+)',
-                             review.find('div', class_ = 'prw_rup prw_reviews_stay_date_hsx').text)
-        try:
-            month, year = dict_months[raw_date.group(1)], raw_date.group(2)
-            dict_reviews['date_stayed'].append('{:02d}/{}'.format(month, year))
-            
-        except Exception as e:
-            month, year = review.find('div', class_ = 'prw_rup prw_reviews_stay_date_hsx'), e
-            dict_reviews['date_stayed'].append(f'{month} with error: {year}')
-            
-
-        try:
-            full_response = review.find('div', class_ = 'mgrRspnInline')
-            local_body = []
-
-            for match in ['(.*)\n', '(.*)\.\.\.Más']:
-                re_body = re.search(match, full_response.find('p', class_ = 'partial_entry').text)
-
-                if re_body != None:
-                    local_body.append(re_body.group(1)) # Acá agregar marcador para extracción completa
-                    
-            dict_reviews['response_body'].append(' '.join(local_body))
-
-        except:
-            full_response = None
-            dict_reviews['response_body'].append(None)
-
-        full_response = review.find('div', class_ = 'entry')
-                
-        # After extracting our comments, we ... author name
-        try:
-            dict_reviews['user_name'].append(review.find('div', class_ = 'info_text pointer_cursor').text)
-            
-        except Exception as e:
-            dict_reviews['user_name'].append('La url {} presenta un error de tipo {}'.format(url['scraping'], e)) 
-            
-        try:
-            dict_reviews['user_reviews'].append(int(re.match('([0-9]+)',
-                                                             review.find('span',
-                                                                         class_ = 'badgeText').text).group(1)))
-        except Exception as e:
-            dict_reviews['user_reviews'].append('La url {} presenta un error de tipo {}'.format(url['scraping'], e)) 
-
-        get_votes = lambda useful_votes: n.text if useful_votes != None else 0
-        dict_reviews['useful_votes'].append(get_votes(review.find('span', class_ = 'numHlpIn')))
-        
-        dict_reviews['url'].append(url)    
+    except Exception as e:
+        dict_reviews = {'id':'error', 'restaurant':'error', 'grade':'error',
+                        'date_review':'error', 'comments':'error', 'date_stayed':'error',
+                        'response_body':'error', 'user_name':'error', 'user_reviews':'error',
+                        'useful_votes':'error', 'url':url, 'Error':e}
 
     return (dict_reviews)
